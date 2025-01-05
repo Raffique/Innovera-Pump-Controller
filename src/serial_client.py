@@ -1,14 +1,15 @@
-import serial_client
+import serial
 import json
 import time
 import threading
 
 class SerialClient:
-    def __init__(self):
+    def __init__(self, callback):
         self.ser = None
         self.lock = threading.Lock()  # Mutex for thread-safe access
         self.running = True           # Control flag for the thread
         self.message_thread = None    # Thread for listening to messages
+        self.callback = callback
 
         # Try to establish connection
         self.reconnect()
@@ -25,7 +26,7 @@ class SerialClient:
         if self.ser and self.ser.is_open:
             self.ser.close()
 
-    def on_messages(self, callback):
+    def on_messages(self):
         """Thread function to continuously listen for messages."""
         while self.running:
             with self.lock:  # Ensure exclusive access to the serial port
@@ -35,11 +36,12 @@ class SerialClient:
                             line = self.ser.readline().decode('utf-8').rstrip()
                             try:
                                 data = json.loads(line)  # Parse JSON data
-                                callback(data)  # Process the data
+                                if self.callback != None:
+                                    self.callback(data)  # Process the data
                             except json.JSONDecodeError as e:
                                 print(f"Invalid JSON received: {line} - {e}")
                             self.ser.flush()
-                    except serial_client.SerialException as e:
+                    except serial.SerialException as e:
                         print(f"Serial connection error: {e}")
                         self.reconnect()
             time.sleep(0.1)  # Prevent CPU overuse
@@ -52,7 +54,7 @@ class SerialClient:
                     json_data = json.dumps(data) + '\n'
                     self.ser.write(json_data.encode('utf-8'))  # Encode as bytes and send
                     print(f"Sent data: {json_data}")
-            except serial_client.SerialException as e:
+            except serial.SerialException as e:
                 print(f"Error sending data: {e}")
                 self.reconnect()
 
@@ -67,13 +69,15 @@ class SerialClient:
         while True:
             try:
                 with self.lock:  # Lock the port during reconnect attempts
-                    self.ser = serial_client.Serial('/dev/ttyACM0', 115200, timeout=1)
+                    # self.ser = serial_client.Serial('/dev/ttyACM0', 115200, timeout=1)
+                    self.ser = serial.Serial('COM10', 115200, timeout=1)
                     print("Reconnected on /dev/ttyACM0")
                     break
             except:
                 try:
                     with self.lock:
-                        self.ser = serial_client.Serial('/dev/ttyUSB0', 115200, timeout=1)
+                        # self.ser = serial_client.Serial('/dev/ttyUSB0', 115200, timeout=1)
+                        self.ser = serial.Serial('com10', 115200, timeout=1)
                         print("Reconnected on /dev/ttyUSB0")
                         break
                 except:
@@ -88,10 +92,12 @@ class SerialClient:
         self.on_disconnect()
 
 if __name__ == "__main__":
-    client = SerialClient()
+    
 
     def test_callback(data):
         print(f"Callback received: {data}")
+
+    client = SerialClient(test_callback)
 
     try:
         while True:

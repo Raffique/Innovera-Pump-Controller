@@ -106,7 +106,7 @@ def test_callback(data):
 
 
 if __name__ == "__main__":
-    client = MQTTClient(id="client_1", callback=test_callback, alive_pulse_interval=5)
+    client = MQTTClient(id="client_1", broker='172.16.15.169', callback=test_callback, alive_pulse_interval=5)
 
     try:
         # Simulate sending alive pulses periodically
