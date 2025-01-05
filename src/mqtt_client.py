@@ -1,6 +1,7 @@
 import paho.mqtt.client as mqtt
 import json
 import time
+import threading
 
 class MQTTClient:
     def __init__(self, id, broker="localhost", port=1883, topic="test/topic", alive_pulse_interval=2, callback=None):
@@ -12,8 +13,12 @@ class MQTTClient:
         self.callback = callback
 
         self.mqtt_connected = False
+        self.reconnect_thread_active = False
+        self.lock = threading.Lock()
         self.last_message_time = time.time()
         self.initial_connection = False
+
+
         
         self.mqtt_client = mqtt.Client(
             client_id=self.id,
@@ -35,14 +40,16 @@ class MQTTClient:
             self.mqtt_client.loop_start()
             self.initial_connection = True
         except Exception as e:
-            self.reconnect()
+            self.start_reconnect_thread()
 
     def on_connect(self, client, userdata, flags, rc, properties=None):
         print(f"Connected to MQTT broker with result code {rc}")
         # Resubscribe to topics on reconnect
         if rc == 0:
+            with self.lock:
+                self.mqtt_connected = True
+                self.reconnect_thread_active = False
             self.mqtt_client.subscribe(self.topic)
-            self.mqtt_connected = True
         else:
             print(f"Failed to connect with result code: {rc}")
             self.mqtt_connected = False
@@ -50,9 +57,10 @@ class MQTTClient:
 
     def on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
         print(f"Disconnected from MQTT broker with reason code: {reason_code}")
-        self.mqtt_connected = False
+        with self.lock:
+            self.mqtt_connected = False
         if reason_code != 0:
-            self.reconnect()
+            self.start_reconnect_thread()
 
     def on_message(self, client, userdata, message):
         try:
@@ -84,6 +92,10 @@ class MQTTClient:
             time.sleep(5)
             self.reconnect()
 
+    def start_reconnect_thread(self):
+        self.reconnect_thread_active = True
+        threading.Thread(target=self.reconnect, daemon=True).start()
+
     def alive_pulse(self):
         data = {"station_id": self.id, "status": "ALIVE"}
         self.send(data)
@@ -91,7 +103,7 @@ class MQTTClient:
     def check_connection(self):
         # Check if no message has been received in a given timeout period
         if not self.mqtt_connected:
-            self.reconnect()
+            self.start_reconnect_thread()
 
     def is_connected(self):
         return self.mqtt_client.is_connected()
@@ -106,12 +118,11 @@ def test_callback(data):
 
 
 if __name__ == "__main__":
-    client = MQTTClient(id="client_1", broker='172.16.15.169', callback=test_callback, alive_pulse_interval=5)
+    client = MQTTClient(id="client_1", broker='192.168.100.69', callback=test_callback, alive_pulse_interval=5)
 
     try:
         # Simulate sending alive pulses periodically
         while True:
-            client.alive_pulse()
 
             # Send test data every 3 seconds
             data = {"message": f"Heartbeat from {client.id}"}

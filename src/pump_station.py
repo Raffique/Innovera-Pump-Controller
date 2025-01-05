@@ -24,6 +24,7 @@ class PumpStation:
         self.next_station_online = False
         self.last_status_update = {}
         self.station_status = {}
+        self.no_updates_timeout = 30
         
         # Initialize communication clients
         self.mqtt_client = mqtt_client.MQTTClient(
@@ -51,15 +52,24 @@ class PumpStation:
             self.station_status[station_id] = data
             self.last_status_update[station_id] = time.time()
             
-            # Check if this is the next station we need to monitor
-            if self.should_monitor_station(station_id):
-                self.handle_next_station_status(data)
+            # check if network/local switch is activated
+            if not self.op_mode:
+                # Check if this is the next station we need to monitor
+                if self.should_monitor_station(station_id):
+                    if self.check_all_network_nodes_online():
+                        self.handle_network_mode(data)
+                    else:
+                        self.handle_local_mode()
 
     def serial_callback(self, data: Dict):
         """Handle incoming serial data from Arduino."""
         if data.get("station_id") == self.station_id:
             self.update_station_state(data)
-            self.mqtt_client.send(data)  # Forward to MQTT
+            if self.mqtt_client.is_connected():
+                self.mqtt_client.send(data)  # Forward to MQTT
+            else:
+                if not self.op_mode:
+                    self.handle_local_mode()
 
     def update_station_state(self, data: Dict):
         """Update internal state based on Arduino data."""
@@ -70,6 +80,13 @@ class PumpStation:
         self.fault_detected = data.get("fault", False)
         self.op_mode = data.get("op_mode", False)
 
+        print(f"pump status {self.pump_status}")
+        print(f"fault status {self.fault_detected}")
+        print(f"pressure status {self.pressure_ok}")
+        print(f"top float status {self.top_level_triggered}")
+        print(f"bottom float status {self.bottom_level_triggered}")
+        print(f"op_mode status {self.op_mode}")
+
     def should_monitor_station(self, station_id: int) -> bool:
         """Determine if we should monitor this station based on our station ID."""
         if self.station_id == 1:
@@ -78,7 +95,7 @@ class PumpStation:
             return station_id == 3
         return False
 
-    def handle_next_station_status(self, data: Dict):
+    def handle_network_mode(self, data: Dict):
         """Process status updates from the next station in the chain."""
         if self.station_id == 1:  # Station 1 monitors Station 2's bottom level
             if data.get("bottom_level", False) and not self.fault_detected:
@@ -90,6 +107,8 @@ class PumpStation:
                 self.start_pump()
             elif data.get("top_level", True) or self.top_level_triggered:
                 self.stop_pump()
+        elif self.station_id == 3:
+            pass
 
     def start_pump(self):
         """Start the pump if conditions allow."""
@@ -113,15 +132,22 @@ class PumpStation:
         command = {"pump_control": state}
         self.serial_client.send(command)
 
-    def check_network_status(self):
+    def is_connected(self):
+        return self.mqtt_client.is_connected()
+
+    def check_all_network_nodes_online(self):
         """Check if we're connected to MQTT and next station is online."""
-        self.mqtt_connected = self.mqtt_client.is_connected()
-        
-        # Check if we've heard from the next station recently
-        next_station_id = self.station_id + 1 if self.station_id < 3 else None
-        if next_station_id:
-            last_update = self.last_status_update.get(next_station_id, 0)
-            self.next_station_online = (time.time() - last_update) < 10  # 10 second timeout
+        # this not only checks if the current station is online but all other stations
+        # this needs to be done cuz the system should only work in network mode if all stations are connected
+        if not self.is_connected():
+            return False
+
+        for key, value in enumerate(self.last_status_update):
+            if  time.time() - value < self.no_updates_timeout:
+                return False
+            
+        return True
+
 
     def handle_local_mode(self):
         """Manage pump operation in local control mode."""
@@ -129,39 +155,36 @@ class PumpStation:
         
         if self.station_id == 1:
             # Station 1: Use pressure switch and timing
-            if self.pressure_ok and not self.fault_detected:
-                if current_time - self.last_pump_time >= self.LOCAL_PUMP_INTERVAL:
-                    self.start_pump()
-                    self.last_pump_time = current_time
-            else:
-                self.stop_pump()
+            if not self.fault_detected:
+                if self.pressure_ok:
+                    if current_time - self.last_pump_time >= self.LOCAL_PUMP_INTERVAL:
+                        self.start_pump()
+                        self.last_pump_time = current_time
+                else:
+                    self.stop_pump()
                 
         elif self.station_id == 2:
             # Station 2: Use local tank levels
-            if self.bottom_level_triggered and not self.top_level_triggered and not self.fault_detected:
-                self.start_pump()
-            else:
-                self.stop_pump()
+            if not self.fault_detected:
+                if self.top_level_triggered:
+                    self.start_pump()
+                elif self.bottom_level_triggered:
+                    self.stop_pump()
+
+        elif self.station_id == 3:
+            # station 3 doesnt control its motor
+            pass 
 
     def monitor_loop(self):
         """Main monitoring loop to handle mode switching and status checks."""
         while self.running:
-            self.check_network_status()
-            
-            # Determine if we should be in local mode
-            should_be_local = not self.mqtt_connected or not self.next_station_online
-            
-            if should_be_local != self.local_mode:
-                self.local_mode = should_be_local
-                print(f"Station {self.station_id} switching to {'local' if should_be_local else 'network'} mode")
-            
-            # Handle control based on current mode
-            if self.local_mode:
-                self.handle_local_mode()
-            
-            # Send alive pulse to MQTT if connected
-            if self.mqtt_connected:
-                self.mqtt_client.alive_pulse()
+
+            if not self.check_all_network_nodes_online():
+                self.local_mode = True
+            else:
+                self.local_mode = False
+
+            print(f"Station {self.station_id} switching to {'local' if self.local_mode else 'network'} mode")
             
             time.sleep(1)
 

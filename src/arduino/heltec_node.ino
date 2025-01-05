@@ -1,6 +1,6 @@
 // Pin definitions
 const int PUMP_STATUS_PIN = 2;     // Relay sensing if pump is on/off
-const int PRESSURE_SWITCH_PIN = 3;  // For station 1 only
+const int PRESSURE_SWITCH_PIN = 4;  // For station 1 only
 const int TOP_LEVEL_PIN = 4;       // For stations 2 & 3
 const int BOTTOM_LEVEL_PIN = 5;    // For stations 2 & 3
 const int FAULT_PIN = 6;           // Fault detection
@@ -15,6 +15,9 @@ unsigned long lastSendTime = 0;
 
 // Station configuration
 const int STATION_ID = 1;  // Change this for each station (1, 2, or 3)
+const int MAX_REATTEMPTS = 5;
+int turn_on_reattempts = 0;
+int turn_off_reattempts = 0;
 
 void setup() {
   // Initialize serial communication
@@ -60,8 +63,6 @@ void sendStatus() {
   doc["bottom_level"] = !digitalRead(BOTTOM_LEVEL_PIN);
   doc["fault"] = !digitalRead(FAULT_PIN);
   doc["op_mode"] = !digitalRead(OP_MODE_PIN);
-  doc["button1"] = !digitalRead(BUTTON1_PIN);
-  doc["button2"] = !digitalRead(BUTTON2_PIN);
   
   // Serialize JSON to string
   String jsonString;
@@ -85,13 +86,5 @@ void processCommand(String command) {
     bool pumpState = doc["pump_control"];
     digitalWrite(PUMP_CONTROL_PIN, pumpState);
     
-    // Send confirmation
-    StaticJsonDocument<100> response;
-    response["status"] = "ok";
-    response["pump_set"] = pumpState;
-    
-    String responseString;
-    serializeJson(response, responseString);
-    Serial.println(responseString);
   }
 }
