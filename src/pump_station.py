@@ -109,15 +109,21 @@ class PumpStation:
     def handle_network_mode(self, data: Dict):
         """Process status updates from the next station in the chain."""
         if self.station_id == 1:  # Station 1 monitors Station 2's bottom level
-            if data.get("bottom_level", False) and not self.fault_detected and self.pressure_ok:
-                self.start_pump()
-            elif data.get("top_level", False) and not self.pressure_ok:
+            if not self.pressure_ok:
                 self.stop_pump()
+            elif not data.get("bottom_level", True) and not data.get("top_level", True) and not self.fault_detected:
+                self.start_pump()
+            elif data.get("bottom_level", False) and data.get("top_level", False):
+                self.stop_pump()
+
         elif self.station_id == 2:  # Station 2 monitors Station 3's levels
-            if data.get("bottom_level", False) and not self.fault_detected and not self.bottom_level_triggered:
-                self.start_pump()
-            elif data.get("top_level", False) and not self.bottom_level_triggered:
+            if not self.bottom_level_triggered and not self.top_level_triggered:
                 self.stop_pump()
+            elif not data.get("bottom_level", True) and not data.get("top_level", True) and not self.fault_detected:
+                self.start_pump()
+            elif data.get("top_level", False) and data.get("top_level", False) and not self.bottom_level_triggered:
+                self.stop_pump()
+
         elif self.station_id == 3:
             pass
 
@@ -186,10 +192,10 @@ class PumpStation:
             print("station 2 ...........")
             # Station 2: Use local tank levels
             if not self.fault_detected:
-                if self.top_level_triggered:
+                if self.top_level_triggered and self.bottom_level_triggered:
                     print("station 2 start pump local")
                     self.start_pump()
-                elif self.bottom_level_triggered:
+                elif not self.top_level_triggered and not self.bottom_level_triggered:
                     print("station 2 stop pump local")
                     self.stop_pump()
 
