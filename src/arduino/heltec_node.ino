@@ -1,11 +1,13 @@
+#include <ArduinoJson.h>
+
 // Pin definitions
-const int PUMP_STATUS_PIN = 2;     // Relay sensing if pump is on/off
-const int PRESSURE_SWITCH_PIN = 4;  // For station 1 only
-const int TOP_LEVEL_PIN = 4;       // For stations 2 & 3
+const int PUMP_STATUS_PIN = 7;     // Relay sensing if pump is on/off
+const int PRESSURE_SWITCH_PIN = 6;  // For station 1 only
+const int TOP_LEVEL_PIN = 6;       // For stations 2 & 3
 const int BOTTOM_LEVEL_PIN = 5;    // For stations 2 & 3
-const int FAULT_PIN = 6;           // Fault detection
-const int OP_MODE_PIN = 7;         // Operation mode switch
-const int PUMP_CONTROL_PIN = 8;    // Relay to control pump
+const int FAULT_PIN = 4;           // Fault detection
+const int OP_MODE_PIN = 3;         // Operation mode switch
+const int PUMP_CONTROL_PIN = 39;    // Relay to control pump
 const int BUTTON1_PIN = 9;         // Info button 1
 const int BUTTON2_PIN = 10;        // Info button 2
 
@@ -15,9 +17,6 @@ unsigned long lastSendTime = 0;
 
 // Station configuration
 const int STATION_ID = 1;  // Change this for each station (1, 2, or 3)
-const int MAX_REATTEMPTS = 5;
-int turn_on_reattempts = 0;
-int turn_off_reattempts = 0;
 
 void setup() {
   // Initialize serial communication
@@ -77,7 +76,6 @@ void processCommand(String command) {
   DeserializationError error = deserializeJson(doc, command);
   
   if (error) {
-    Serial.println("{\"error\": \"Invalid JSON command\"}");
     return;
   }
   
