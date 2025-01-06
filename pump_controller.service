@@ -1,0 +1,14 @@
+[Unit]
+Description=Run Python Script With Virtual Environment
+After=metwork.target
+
+[Service]
+Type=simple
+ExecStart=/home/pi/Innovera-Pump-Controller/venv/bin/python /home/pi/Innovera-Pump-Controller/src/main.py
+WorkingDirectory=/home/pi/Innovera-Pump-Controller
+Environment=PATH=/home/pi/Innovera-Pump-Controller/venv/bin
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi.user.target
