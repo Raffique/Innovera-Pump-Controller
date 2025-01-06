@@ -70,14 +70,14 @@ class SerialClient:
             try:
                 with self.lock:  # Lock the port during reconnect attempts
                     # self.ser = serial_client.Serial('/dev/ttyACM0', 115200, timeout=1)
-                    self.ser = serial.Serial('COM10', 115200, timeout=1)
+                    self.ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
                     print("Reconnected on /dev/ttyACM0")
                     break
             except:
                 try:
                     with self.lock:
                         # self.ser = serial_client.Serial('/dev/ttyUSB0', 115200, timeout=1)
-                        self.ser = serial.Serial('com10', 115200, timeout=1)
+                        self.ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
                         print("Reconnected on /dev/ttyUSB0")
                         break
                 except:

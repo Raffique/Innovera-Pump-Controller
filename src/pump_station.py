@@ -6,7 +6,7 @@ from typing import Optional, Dict
 import threading
 
 class PumpStation:
-    def __init__(self, station_id: int, control_pump: bool = True, has_tank: bool = True):
+    def __init__(self, station_id: int, control_pump: bool = True, has_tank: bool = True, broker="localhost"):
         self.station_id = station_id
         self.control_pump = control_pump
         self.has_tank = has_tank
@@ -25,14 +25,15 @@ class PumpStation:
         self.last_status_update = {}
         self.station_status = {}
         self.no_updates_timeout = 30
+        self.number_of_stations_in_series = 3
         
         # Initialize communication clients
         self.mqtt_client = mqtt_client.MQTTClient(
             id=f"station_{station_id}",
+            broker = broker,
             callback=self.mqtt_callback
         )
-        self.serial_client = serial_client.SerialClient()
-        self.serial_client.on_messages(self.serial_callback)
+        self.serial_client = serial_client.SerialClient(self.serial_callback)
         
         # Local control mode parameters
         self.LOCAL_PUMP_INTERVAL = 300  # 5 minutes
@@ -41,34 +42,44 @@ class PumpStation:
         
         # Start monitoring thread
         self.running = True
-        self.monitor_thread = threading.Thread(target=self.monitor_loop)
-        self.monitor_thread.daemon = True
-        self.monitor_thread.start()
+        self.monitor_loop()
+        #self.monitor_thread = threading.Thread(target=self.monitor_loop)
+        #self.monitor_thread.daemon = True
+        #self.monitor_thread.start()
 
     def mqtt_callback(self, data: Dict):
         """Handle incoming MQTT messages."""
+        
+
         station_id = data.get("station_id")
         if station_id and station_id != self.station_id:
             self.station_status[station_id] = data
             self.last_status_update[station_id] = time.time()
             
-            # check if network/local switch is activated
-            if not self.op_mode:
+            
+        # check if network/local switch is activated
+        print("before op mode test")
+        if not self.op_mode:
+            print("after op mode test")
+            if self.check_all_network_nodes_online():
                 # Check if this is the next station we need to monitor
                 if self.should_monitor_station(station_id):
-                    if self.check_all_network_nodes_online():
-                        self.handle_network_mode(data)
-                    else:
-                        self.handle_local_mode()
+                    self.handle_network_mode(data)
+            else:
+                self.handle_local_mode()
 
     def serial_callback(self, data: Dict):
         """Handle incoming serial data from Arduino."""
         if data.get("station_id") == self.station_id:
             self.update_station_state(data)
+            print("test 1")
             if self.mqtt_client.is_connected():
+                print("test 2")
                 self.mqtt_client.send(data)  # Forward to MQTT
             else:
+                print("test 3")
                 if not self.op_mode:
+                    print("test 4")
                     self.handle_local_mode()
 
     def update_station_state(self, data: Dict):
@@ -98,14 +109,14 @@ class PumpStation:
     def handle_network_mode(self, data: Dict):
         """Process status updates from the next station in the chain."""
         if self.station_id == 1:  # Station 1 monitors Station 2's bottom level
-            if data.get("bottom_level", False) and not self.fault_detected:
+            if data.get("bottom_level", False) and not self.fault_detected and self.pressure_ok:
                 self.start_pump()
-            else:
+            elif data.get("top_level", False) and not self.pressure_ok:
                 self.stop_pump()
         elif self.station_id == 2:  # Station 2 monitors Station 3's levels
-            if data.get("bottom_level", False) and not self.top_level_triggered:
+            if data.get("bottom_level", False) and not self.fault_detected and not self.bottom_level_triggered:
                 self.start_pump()
-            elif data.get("top_level", True) or self.top_level_triggered:
+            elif data.get("top_level", False) and not self.bottom_level_triggered:
                 self.stop_pump()
         elif self.station_id == 3:
             pass
@@ -141,6 +152,9 @@ class PumpStation:
         # this needs to be done cuz the system should only work in network mode if all stations are connected
         if not self.is_connected():
             return False
+            
+        if self.number_of_stations_in_series -1 != len(self.last_status_update):
+            return False
 
         for key, value in enumerate(self.last_status_update):
             if  time.time() - value < self.no_updates_timeout:
@@ -151,28 +165,37 @@ class PumpStation:
 
     def handle_local_mode(self):
         """Manage pump operation in local control mode."""
+        print("handle local mode start")
         current_time = time.time()
         
         if self.station_id == 1:
+            print("station 1 ............")
             # Station 1: Use pressure switch and timing
             if not self.fault_detected:
                 if self.pressure_ok:
+                    print("pressure ok")
                     if current_time - self.last_pump_time >= self.LOCAL_PUMP_INTERVAL:
                         self.start_pump()
                         self.last_pump_time = current_time
+                        print("start pump on station 1 local")
                 else:
                     self.stop_pump()
+                    print("stop pump on station 1 local")
                 
         elif self.station_id == 2:
+            print("station 2 ...........")
             # Station 2: Use local tank levels
             if not self.fault_detected:
                 if self.top_level_triggered:
+                    print("station 2 start pump local")
                     self.start_pump()
                 elif self.bottom_level_triggered:
+                    print("station 2 stop pump local")
                     self.stop_pump()
 
         elif self.station_id == 3:
             # station 3 doesnt control its motor
+            print("station 3 ...........")
             pass 
 
     def monitor_loop(self):
