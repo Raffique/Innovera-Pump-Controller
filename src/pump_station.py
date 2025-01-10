@@ -25,7 +25,7 @@ class PumpStation:
         self.last_status_update = {}
         self.station_status = {}
         self.no_updates_timeout = 30
-        self.number_of_stations_in_series = 3
+        self.number_of_stations_in_series = 2
         
         # Initialize communication clients
         self.mqtt_client = mqtt_client.MQTTClient(
@@ -39,6 +39,7 @@ class PumpStation:
         self.LOCAL_PUMP_INTERVAL = 300  # 5 minutes
         self.last_pump_time = 0
         self.local_mode = False
+        self.toggle = False
         
         # Start monitoring thread
         self.running = True
@@ -181,9 +182,16 @@ class PumpStation:
                 if self.pressure_ok:
                     print("pressure ok")
                     if current_time - self.last_pump_time >= self.LOCAL_PUMP_INTERVAL:
-                        self.start_pump()
                         self.last_pump_time = current_time
-                        print("start pump on station 1 local")
+                        if self.toggle:
+                            self.start_pump()
+                            print("start pump on station 1 local")
+                            self.toggle = not self.toggle
+                        else:
+                            self.stop_pump()
+                            print("stop pump on station 1 local")
+                            self.toggle = not self.toggle
+
                 else:
                     self.stop_pump()
                     print("stop pump on station 1 local")
