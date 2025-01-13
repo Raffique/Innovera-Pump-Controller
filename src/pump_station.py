@@ -49,7 +49,7 @@ class PumpStation:
         self.serial_client = serial_client.SerialClient(self.serial_callback)
         
         # Local control mode parameters
-        self.LOCAL_PUMP_INTERVAL = 10  # 5 minutes
+        self.LOCAL_PUMP_INTERVAL = 2700  # 5 minutes
         self.last_pump_time = 0
         self.local_mode = False
         self.toggle = True
@@ -146,7 +146,7 @@ class PumpStation:
             elif not data.get("bottom_level", True) and not data.get("top_level", True) and not self.fault_detected:
                 self.start_pump()
                 print("start pump")
-            elif data.get("top_level", False) and data.get("top_level", False) and not self.bottom_level_triggered:
+            elif data.get("bottom_level", False) and data.get("top_level", False):
                 self.stop_pump()
                 print("stop pump")
 
