@@ -230,7 +230,12 @@ class PumpStation:
                 if time.time() - self.data["last_time_of next_station"] > self.no_updates_timeout:
                     self.data["is_next_station_online"] = False
 
-            print(f"Station {self.station_id} switching to {'local' if not self.data["is_next_station_online"] else 'network'} mode")
+            mode = ""
+            if not self.data["is_next_station_online"]:
+                mode = "local"
+            else:
+                mode = "network"
+            print(f"Station {self.station_id} switching to {mode} mode")
 
             time.sleep(1)
 
