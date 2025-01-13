@@ -49,7 +49,7 @@ class PumpStation:
         self.serial_client = serial_client.SerialClient(self.serial_callback)
         
         # Local control mode parameters
-        self.LOCAL_PUMP_INTERVAL = 2700  # 5 minutes
+        self.LOCAL_PUMP_INTERVAL = 2700  # 45 minutes
         self.last_pump_time = 0
         self.local_mode = False
         self.toggle = True

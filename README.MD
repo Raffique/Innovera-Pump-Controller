@@ -1,18 +1,16 @@
-sudo systemctl daemon-reload
-Step 4: Enable and Start the Service
-Enable the service to start it automatically on boot:
+Create python venv environment
 
-bash
-Copy code
-sudo systemctl enable your_service_name
-Start the service:
+pip install paho-mqtt pyserial
 
-bash
-Copy code
-sudo systemctl start your_service_name
-Verify the service status:
 
-bash
-Copy code
-sudo systemctl status your_service_name
-This will show the status of your service, including logs if there are any errors.
+before running main.py
+in main.py choosinge the station configuration
+choose the internal ip address of the raspberry pi at station 1 to be 
+10.10.0.248
+
+the ip adress att he other stations should be the external ip adress of station 1 since its hosting the mqtt broker
+10.10.10.6
+
+in pumpstation.py
+change the value in seconds for how long pump at station 1 should alternate ON and OFF
+self.LOCAL_PUMP_INTERVAL = 2700  # 45 minutes
