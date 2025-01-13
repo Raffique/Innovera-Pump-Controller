@@ -48,15 +48,15 @@ class SerialClient:
 
     def send(self, data):
         """Send data over the serial connection."""
-        with self.lock:  # Ensure exclusive access to the serial port
-            try:
-                if self.ser and self.ser.is_open:
-                    json_data = json.dumps(data) + '\n'
-                    self.ser.write(json_data.encode('utf-8'))  # Encode as bytes and send
-                    print(f"Sent data: {json_data}")
-            except serial.SerialException as e:
-                print(f"Error sending data: {e}")
-                self.reconnect()
+        # with self.lock:  # Ensure exclusive access to the serial port
+        try:
+            if self.ser and self.ser.is_open:
+                json_data = json.dumps(data) + '\n'
+                self.ser.write(json_data.encode('utf-8'))  # Encode as bytes and send
+                print(f"Sent data: {json_data}")
+        except serial.SerialException as e:
+            print(f"Error sending data: {e}")
+            self.reconnect()
 
     def is_connected(self):
         """Check if the serial connection is active."""
@@ -70,7 +70,7 @@ class SerialClient:
             try:
                 with self.lock:  # Lock the port during reconnect attempts
                     # self.ser = serial_client.Serial('/dev/ttyACM0', 115200, timeout=1)
-                    self.ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+                    self.ser = serial.Serial('COM10', 115200, timeout=1)
                     print("Reconnected on /dev/ttyACM0")
                     break
             except:
