@@ -29,7 +29,7 @@ class PumpStation:
             "op_mode": False,
             "soft_manual": False,
             "is_next_station_online": False,
-            "last_time_of next_station": None
+            "last_time_of_next_station": None
         }
         
         # Network state tracking
@@ -66,7 +66,22 @@ class PumpStation:
 
         try:
             station_id = data.get("station_id")
-            if self.data["station_id"] + 1 == station_id:
+            if station_id == 0:
+                which_station = data.get("which_station")
+                if which_station == self.data["station_id"]:
+                    command = data.get("command")
+                    if command == "set_soft_manual":
+                        self.data["soft_manual"] = data.get("value")
+                    elif command == "set_pump":
+                        if self.data["soft_manual"]:
+                            if data.get("value"):
+                                if self.data["station_id"] == 1 and self.data["pressure_switch"]:
+                                    self.start_pump()
+                                elif self.data["station_id"] == 2 and not self.data["bottom_level"]:
+                                    self.start_pump()
+                            else:
+                                self.stop_pump()
+            elif self.data["station_id"] + 1 == station_id and not self.data["soft_manual"]:
                 self.data["is_next_station_online"] = True
                 self.data["last_time_of_next_station"] = time.time()
 
@@ -76,7 +91,7 @@ class PumpStation:
                 else:
                     self.handle_local_mode()
 
-            elif self.data["station_id"] == station_id and not self.data["is_next_station_online"]:
+            elif self.data["station_id"] == station_id and not self.data["is_next_station_online"] and not self.data["soft_manual"]:
                 self.handle_local_mode()
         except Exception as e:
             self.handle_local_mode()  # Fallback to local mode on error
@@ -89,8 +104,12 @@ class PumpStation:
             if self.mqtt_client.is_connected():
                 self.mqtt_client.send(self.data)  # Forward to MQTT
             else:
+                # if the systemm is disconnected from Mqqt broker soft_manual must be reset
+                self.data["soft_manual"] = False
                 self.handle_local_mode()
         except Exception as e:
+            # if the systemm is disconnected from Mqqt broker soft_manual must be reset
+            self.data["soft_manual"] = False
             self.handle_local_mode()  # Fallback to local mode on error
 
     def update_station_state(self, data: Dict):
@@ -102,19 +121,23 @@ class PumpStation:
         self.fault_detected = data.get("fault", False)
         self.op_mode = data.get("op_mode", False)
 
-        self.data["presssure_switch"] = data.get("pressure_switch", False)
+        self.data["pressure_switch"] = data.get("pressure_switch", False)
         self.data["top_level"] = data.get("top_level", False)
         self.data["bottom_level"] = data.get("bottom_level", False)
         self.data["pump_status"] = data.get("pump_status", False)
         self.data["fault_detected"] = data.get("fault", False)
         self.data["op_mode"] = data.get("op_mode", False)
 
-        print(f"pump status {self.pump_status}")
-        print(f"fault status {self.fault_detected}")
-        print(f"pressure status {self.pressure_ok}")
-        print(f"top float status {self.top_level_triggered}")
-        print(f"bottom float status {self.bottom_level_triggered}")
-        print(f"op_mode status {self.op_mode}")
+        # if manual switch is turned back to local mode it must reset soft manual control
+        if self.data["op_mode"]:
+            self.data["soft_manual"] = False
+
+        # print(f"pump status {self.pump_status}")
+        # print(f"fault status {self.fault_detected}")
+        # print(f"pressure status {self.pressure_ok}")
+        # print(f"top float status {self.top_level_triggered}")
+        # print(f"bottom float status {self.bottom_level_triggered}")
+        # print(f"op_mode status {self.op_mode}")
 
     def should_monitor_station(self, station_id: int) -> bool:
         """Determine if we should monitor this station based on our station ID."""
@@ -129,26 +152,26 @@ class PumpStation:
         if self.station_id == 1:  # Station 1 monitors Station 2's bottom level
             if not self.pressure_ok:
                 self.stop_pump()
-                print("pressure not ok")
+                # print("pressure not ok")
             elif not data.get("bottom_level", True) and not data.get("top_level", True) and not self.fault_detected:
                 self.start_pump()
-                print("start pump")
+                # print("start pump")
             elif data.get("bottom_level", False) and data.get("top_level", False):
                 self.stop_pump()
-                print("stop pump")
+                # print("stop pump")
 
 
         elif self.station_id == 2:  # Station 2 monitors Station 3's levels
             if not self.bottom_level_triggered and not self.top_level_triggered:
                 self.stop_pump()
-                print("stop pump")
+                # print("stop pump")
 
             elif not data.get("bottom_level", True) and not data.get("top_level", True) and not self.fault_detected:
                 self.start_pump()
-                print("start pump")
+                # print("start pump")
             elif data.get("bottom_level", False) and data.get("top_level", False):
                 self.stop_pump()
-                print("stop pump")
+                # print("stop pump")
 
 
         elif self.station_id == 3:
@@ -176,66 +199,76 @@ class PumpStation:
         command = {"pump_control": state}
         self.serial_client.send(command)
 
+    def set_connected_status(self, state: bool):
+        """send connected status for LED indicator"""
+        command = {"connected_status": state}
+        self.serial_client.send(command)
+
     def is_connected(self):
         return self.mqtt_client.is_connected()
 
 
     def handle_local_mode(self):
         """Manage pump operation in local control mode."""
-        print("handle local mode start")
+        # print("handle local mode start")
         current_time = time.time()
         
         if self.station_id == 1:
-            print("station 1 ............")
+            # print("station 1 ............")
             # Station 1: Use pressure switch and timing
             if not self.fault_detected:
                 if self.pressure_ok:
-                    print("pressure ok")
+                    # print("pressure ok")
                     if current_time - self.last_pump_time >= self.LOCAL_PUMP_INTERVAL:
                         self.last_pump_time = current_time
                         if self.toggle:
                             self.start_pump()
-                            print("start pump on station 1 local")
+                            # print("start pump on station 1 local")
                             self.toggle = not self.toggle
                         else:
                             self.stop_pump()
-                            print("stop pump on station 1 local")
+                            # print("stop pump on station 1 local")
                             self.toggle = not self.toggle
 
                 else:
                     self.stop_pump()
-                    print("stop pump on station 1 local")
+                    # print("stop pump on station 1 local")
                 
         elif self.station_id == 2:
-            print("station 2 ...........")
+            # print("station 2 ...........")
             # Station 2: Use local tank levels
             if not self.fault_detected:
                 if self.top_level_triggered and self.bottom_level_triggered:
-                    print("station 2 start pump local")
+                    # print("station 2 start pump local")
                     self.start_pump()
                 elif not self.top_level_triggered and not self.bottom_level_triggered:
-                    print("station 2 stop pump local")
+                    # print("station 2 stop pump local")
                     self.stop_pump()
 
         elif self.station_id == 3:
             # station 3 doesnt control its motor
-            print("station 3 ...........")
+            # print("station 3 ...........")
             pass 
 
     def monitor_loop(self):
         """Main monitoring loop to handle mode switching and status checks."""
         while self.running:
 
-            if self.data["last_time_of next_station"] != None:
-                if time.time() - self.data["last_time_of next_station"] > self.no_updates_timeout:
+            if self.data["last_time_of_next_station"] != None:
+                if time.time() - self.data["last_time_of_next_station"] > self.no_updates_timeout:
                     self.data["is_next_station_online"] = False
 
             mode = ""
             if not self.data["is_next_station_online"]:
                 mode = "local"
+                self.set_connected_status(False)
             else:
-                mode = "network"
-            print(f"Station {self.station_id} switching to {mode} mode")
+                if self.data["soft_manual"]:
+                    mode = "soft"
+                else:
+                    mode = "network"
+                self.set_connected_status(True)
+            # print(f"Station {self.station_id} switching to {mode} mode")
 
             time.sleep(1)
 

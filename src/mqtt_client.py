@@ -64,7 +64,7 @@ class MQTTClient:
 
     def on_message(self, client, userdata, message):
         try:
-            print("on message mqtt")
+            #print("on message mqtt")
             data = json.loads(message.payload.decode())
             self.callback(data)
             self.last_message_time = time.time()
@@ -80,7 +80,7 @@ class MQTTClient:
 
     def reconnect(self):
         try:
-            print("Attempting to reconnect...")
+            #print("Attempting to reconnect...")
             if self.initial_connection:
                 self.mqtt_client.reconnect()
             else:
